@@ -98,6 +98,10 @@ struct thread
 	bool donated; 
 	struct lock* blocked; //阻塞当前线程的锁 
 	 
+	 /*add By HL*/
+	int nice;
+	int recent_cpu;
+	/*add By HL*/
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
