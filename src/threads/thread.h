@@ -98,7 +98,7 @@ struct thread
 	bool donated; 
 	struct lock* blocked; //阻塞当前线程的锁 
 	 
-	 /*add By HL*/
+	 /*add By HL lab4*/
 	int nice;
 	int recent_cpu;
 	/*add By HL*/
