@@ -5,6 +5,10 @@
 #include <list.h>
 #include <stdint.h>
 
+/* My Implementation */
+#include "threads/synch.h"
+/* == My Implementation */
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -120,9 +124,8 @@ struct thread
 extern bool thread_mlfqs;
 /*add by me*/
 void thread_update_priority(struct thread *curr, int new_priority, bool forced);
-
-
 void blocked_thread_check(struct thread*t,void *aux UNUSED);
+
 
 void thread_init (void);
 void thread_start (void);

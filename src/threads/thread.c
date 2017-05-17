@@ -1,4 +1,7 @@
 #include "threads/thread.h"
+/*add By HL*/
+#include "threads/fixed-point.h"
+/*add By HL*/
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -11,9 +14,11 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -71,6 +76,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+/*add By Hl*/
+static int load_avg;
+/*add By Hl*/
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -84,9 +94,6 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
-
-
-
 
 static bool
 thread_sort_cmp (const struct list_elem *lhs, const struct list_elem *rhs, void *aux UNUSED)
@@ -301,6 +308,12 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  /*add By HL*/
+  if (thread_mlfqs)
+  thread_calculate_priority(t);
+  /*add By HL*/
+
  if(priority >  thread_current ()->priority){
     thread_yield (); 
   }
@@ -474,44 +487,134 @@ thread_exit (void)
 }
 
 
+/*add by HL*/
+void thread_calculate_load_avg (void)
+{
+  int ready_threads;
+  
+  if (thread_current () != idle_thread)
+    ready_threads = list_size (&ready_list) + 1;
+  else
+    ready_threads = list_size (&ready_list);
+  load_avg = FP_MULT(FP_CONST(59) / 60, load_avg) + FP_CONST(1) / 60 * ready_threads;
+}
+
+ void thread_calculate_recent_cpu(struct thread *curr)
+{
+
+    if (curr == idle_thread)
+    return;
+
+    int load = 2 * load_avg;
+    curr->recent_cpu = FP_ADD_MIX (FP_MULT (FP_DIV (load, 
+    FP_ADD_MIX(load, 1)), curr->recent_cpu), curr->nice);
+
+}
+
+ void thread_calculate_priority (struct thread *curr)
+{
+  ASSERT (is_thread (curr));
+  
+  if (curr == idle_thread)
+    return;
+  
+  curr->priority = PRI_MAX - FP_ROUND (curr->recent_cpu / 4) - curr->nice * 2;
+  
+  if (curr->priority > PRI_MAX)
+    curr->priority = PRI_MAX;
+  else if (curr->priority < PRI_MIN)
+    curr->priority = PRI_MIN;
+}
+
+
+void thread_calculate_recent_cpu_all (void)
+{
+    struct list_elem *e;
+    struct thread *t;
+  
+    e = list_begin (&all_list);
+    while (e != list_end (&all_list))
+    {
+      t = list_entry (e, struct thread, allelem);
+      thread_calculate_recent_cpu(t);
+      e = list_next (e);
+    }
+}
+
+
+void thread_calculate_priority_all (void)
+{
+  struct list_elem *e;
+  struct thread *t;
+  
+  e = list_begin (&all_list);
+  while (e != list_end (&all_list))
+    {
+      t = list_entry (e, struct thread, allelem);
+      thread_calculate_priority(t);
+      e = list_next (e);
+    }
+    
+  sort_thread_list (&ready_list);
+}
+/*add by HL*/
+
+
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
+  /*add by HL*/
   return thread_current ()->priority;
+  /*add by HL*/
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice ) 
 {
-  /* Not yet implemented. */
+  /*add by HL*/
+  ASSERT (nice >= -20 && nice <= 20);
+  
+  struct thread *curr;
+  
+  curr = thread_current ();
+  
+  curr->nice = nice;
+  thread_calculate_recent_cpu (curr);
+  thread_calculate_priority (curr);
+
+  /*add by HL*/
 }
+
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  /*add by HL*/
+    return thread_current ()->nice;
+  /*add by HL*/
 }
+
 
 /* Returns 100 times the system load average. */
-int
-thread_get_load_avg (void) 
+int thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  /*add by HL*/
+  return FP_ROUND (100 * load_avg);
+  /*add by HL*/
 }
 
+
 /* Returns 100 times the current thread's recent_cpu value. */
-int
-thread_get_recent_cpu (void) 
+int thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  /*add by HL*/
+  return FP_ROUND (100 * thread_current ()->recent_cpu);
+  /*add by HL*/
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -599,10 +702,23 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   
     /*add by HL */
-    t->old_priority = t->priority = priority;
-    t->donated = false;
+    if (!thread_mlfqs)
+    {
+      t->old_priority = t->priority = priority;
+      t->donated = false;
+    }
+    
     t->blocked = NULL;
     list_init (&t->locks);
+
+    if (thread_mlfqs)
+    {
+      t->nice = 0; /* NICE_DEFAULT should be zero */
+      if (t == initial_thread)
+        t->recent_cpu = 0;
+      else
+      t->recent_cpu = thread_get_recent_cpu();
+    }
   /*add by HL */
   
  // t->priority = priority;

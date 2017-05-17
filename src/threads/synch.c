@@ -254,7 +254,7 @@ void lock_acquire (struct lock *lock)
   current_thread->blocked = lock;
   
  
-  while(locked_thread != NULL 
+  while( !thread_mlfqs && locked_thread != NULL 
   && locked_thread->priority < current_thread->priority)
   {
         locked_thread->donated = true;
@@ -277,8 +277,12 @@ void lock_acquire (struct lock *lock)
 
   /*add by HL */
     lock->holder = current_thread;
-    current_thread->blocked = NULL;
-    list_insert_ordered (&lock->holder->locks, &lock->holder_elem, lock_cmp_priority, NULL);
+    if(!thread_mlfqs)
+    {
+      current_thread->blocked = NULL;
+      list_insert_ordered (&lock->holder->locks,&lock->holder_elem, lock_cmp_priority, NULL);
+    }
+
     intr_set_level (old_level);
    /*add by HL */
   
@@ -318,6 +322,9 @@ void lock_release (struct lock *lock)
     struct lock *another_lock;
     enum intr_level old_level;
     cur = thread_current ();
+
+    if (!thread_mlfqs)
+    ASSERT (cur->blocked == NULL);
     /*add by HL */
   
     ASSERT (lock != NULL);
@@ -329,6 +336,7 @@ void lock_release (struct lock *lock)
     sema_up (&lock->semaphore);
   
      /*add by HL */
+  if (!thread_mlfqs){
      list_remove (&lock->holder_elem);
      lock->lock_priority = PRI_MIN - 1;
      if (list_empty (&cur->locks))
@@ -349,6 +357,7 @@ void lock_release (struct lock *lock)
               cur->donated = false;
            }
      }
+    }
       intr_set_level (old_level);
     /*add by HL */
 }
